@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+PATH=.
+# Outputs number of rows and columns of space-separated file. Up to 50 columns supported.
+# Determines data type for each column (string | number(int) | logical(0|1))
+# Calculates statistics (entries) for each unique word in a column.
+# Lines can be double-quoted (") to put several values into one column. 
+# Column names can't.
+# Lines with empty attributes are skipped. 
+
+
+RANGE_LIMITER=50
+LOGICAL="logical"
+NUMBER="number"
+STRING="string"
+
+if [ -z $1 ]; then
+    echo "Please provide CSV_SPACE_SEP_FILE as first argument"
+    exit 65
+fi
+
+if [ ! -e $1 ]; then
+    echo "File $1 doesn't exist..."
+    exit 66
+fi
+
+function parse_string_line()
+{
+    read -a temp <<< "$row"
+    local counter=0
+    local column_index=0
+    local inside_quotes=0
+
+    if [ "${#temp[@]}" -eq 0 ]; then
+        return 1
+    fi
+
+    while [ "$counter" -lt "${#temp[@]}" ]; do
+
+        if [ "$counter" -ge "$RANGE_LIMITER" ]; then
+            echo "Skipping line: $row. Quoting error" >&2
+            return 1
+        fi
+
+        increment_flag=0
+        if [[ "${temp[$counter]}" =~ \"$ && "${temp[$counter]}" =~ ^\" ]]; then
+            parsed=${temp[$counter]#\"}
+            parsed=${parsed%\"}
+            increment_flag=1
+        elif [[ "${temp[$counter]}" =~ \"$ ]]; then
+            parsed="${temp[$counter]%\"}"
+            inside_quotes=0
+            increment_flag=1
+        elif [ $"$inside_quotes" -eq 1 ]; then
+            parsed="${temp[$counter]}"
+        elif [[ "${temp[$counter]}" =~ ^\" ]]; then
+            parsed="${temp[$counter]#\"}"
+            inside_quotes=1
+        elif [[ "${temp[$counter]}" =~ [^\"] ]]; then
+            parsed="${temp[$counter]}"
+            increment_flag=1
+        fi
+
+        eval "col_${column_index}_stat[\"$parsed\"]=\$((col_${column_index}_stat[\"\$parsed\"]+1))"
+
+        current_dt="${datatypes["$column_index"]}"
+        if [[ "$current_dt" == "$LOGICAL" && ! "$parsed" =~ ^[01]$ ]]; then
+            if [[ "$parsed" =~ ^-?[0-9]+$ ]]; then 
+                datatypes["$column_index"]="$NUMBER"
+            else
+                datatypes["column_index"]="$STRING"
+            fi
+        fi
+
+        if [[ "$current_dt" == "$NUMBER" && ! "$parsed" =~ ^-?[0-9]+$ ]]; then
+            datatypes["column_index"]="$STRING"
+        fi
+
+        if [ "$increment_flag" -eq 1 ]; then
+            ((column_index+=1))
+        fi
+
+        ((counter+=1))
+    done
+
+    if [ "$column_index" -ne "$no_of_columns" ]; then
+        echo "Skipping line $row. Columns anticipated: $no_of_columns. Columns got: $column_index." >&2
+        return 1
+    fi
+    ((no_of_recs+=1))
+}
+
+mapfile -t COLUMNS < $1
+read -a cols <<< "${COLUMNS[0]}"
+no_of_columns=${#cols[@]}
+
+if [ "$no_of_columns" -ge "$RANGE_LIMITER" ]; then
+    echo "Up to $RANGE_LIMITER columns are supported!"
+    exit 65
+fi
+
+datatypes=()
+for (( ind = 0; ind < $no_of_columns; ind++ )); do
+    declare -A "col_${ind}_stat"
+    datatypes["$ind"]="$LOGICAL"
+done
+
+no_of_recs=0
+for row in "${COLUMNS[@]:1}"; do
+    quotes_count=${row//[^\"]}
+    if [ $(( ${#quotes_count} % 2)) -ne 0 ]; then
+        echo "Skipping line: $row. Quoting error" >&2
+        continue
+    fi
+    
+    parse_string_line
+done
+
+
+echo "NUMBER OF RECORDS: ${no_of_recs}"
+echo "NUMBER OF COLUMNS: ${#cols[@]}"
+echo 
+echo "COLUMNS:" 
+echo "-------------------------"
+for (( colind=0; colind<$no_of_columns; colind++ )); do
+    eval "curr_keys=( \"\${!col_${colind}_stat[@]}\" )"
+    echo "${cols[$colind]}(${datatypes["$colind"]})"
+    for key in "${curr_keys[@]}"; do
+        eval "echo \"   $key:  \${col_${colind}_stat[\"$key\"]} entries\" "
+    done
+    echo "-------------------------"
+done

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+PATH=.
+
+# if [ -z $1 ]; then
+#     echo "Please provide text file as the argument"
+#     exit 65 
+# fi
+
+# if [ ! -e $1 ]; then
+#     echo "File $1 doesn't exist..."
+#     exit 66
+# fi
+
+# text=$(<$1)
+# echo "$text"
+
+a=01
+((a+=1))
+echo $a

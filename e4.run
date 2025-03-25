@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+# OPTION -R unfinished!!! ask
+PATH=.
+MAXLEVEL=999
+DIRSONLY=0
+FOLLOW_SYMLINKS=0
+FULL_PATHS=0
+MATCH_PATTERN='-1' # -1 no pattern, 0 - list matching files, 1 - list don't matching files
+PATTERN=''
+
+
+print_usage() {
+    echo -e "\e[1m$1\e[0m - list contents of directories in a tree-like format\n"
+    echo -e "\e[1mSYNOPSIS\e[0m"
+    echo -e "\t$1 [\e[1m-adlfh\e[0m] [\e[1m-L\e[0m level [\e[1m-R\e[0m]] [\e[1m-P\e[0m pattern] [\e[1m-I\e[0m pattern] \e[1mdirectory\e[0m"
+    echo -e "\n\e[1mLISTING OPTIONS\e[0m"
+    echo -e "\t-a All files are printed. By default does not print hidden files\n"
+    echo -e "\t-d List only directories\n"
+    echo -e "\t-l Follow symbolic links like directories\n"
+    echo -e "\t-f Print the full path prefix for each file\n"
+    echo -e "\t-L \e[1mlevel\e[0m"
+    echo -e "\t\t go no deeper than \e[1mlevel\e[0m directories\n"
+    echo -e "\t-R (check out \e[1m-L\e[0m option)\n" #  \e[1mlevel\e[0m
+    echo -e "\t-P \e[1mpattern\e[0m"
+    echo -e "\t\t List only files matching the \e[1mpattern\e[0m\n"
+    echo -e "\t-I \e[1mpattern\e[0m"
+    echo -e "\t\t Do not list files matching the \e[1mpattern\e[0m\n"
+    echo -e "\t<directory> (mandatory) Catalog where to start from"
+}
+
+while getopts "adlfL:RP:I:h" option; do
+    case "$option" in
+        h ) IFS="/" read -a arr <<< "$0"; print_usage "${arr[-1]}"; exit 0 ;;
+        a ) shopt -s dotglob ;;
+        d ) DIRSONLY=1 ;;
+        l ) FOLLOW_SYMLINKS=1 ;;
+        f ) FULL_PATHS=1 ;;
+        L ) if ! [[ "$OPTARG" =~ ^[0-9]+$ ]]; then 
+                echo "Provide numeric option argument for -- L. Provided: $OPTARG".
+                exit 65
+            fi
+            [ "$OPTARG" -lt "$MAXLEVEL" -a "$OPTARG" -gt 0 ] && MAXLEVEL="$OPTARG";
+            ;;
+        R ) echo "R is also provided!!!" ;;
+        P ) MATCH_PATTERN=0; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
+        I ) MATCH_PATTERN=1; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
+    esac
+done
+
+shift $((OPTIND - 1)) 
+
+if [ -z "$1" ]; then
+    echo -e "Please provide the \e[1mdirectory\e[0m argument"
+    exit 65
+fi
+
+if ! [ -d "$1" ]; then
+    echo "$1" is not a directory!
+    exit 
+fi
+
+print_tabs()
+{
+    buff=""
+    local v
+    ((v=$3-1))
+    
+    for ((i=0; i<$1; i++)); do
+        buff+="    "
+    done
+
+    if [ "$2" -eq "$v" ]; then
+        buff+="└── "
+    else
+        buff+="├── "
+    fi
+
+    echo -en "$buff"
+}
+
+depth=1
+echo -e "\e[34m$1\e[0m"
+rec_traversal() {
+    if [ "$depth" -gt "$MAXLEVEL" ]; then
+        return 0
+    fi
+
+    cd $1
+    local arr=(*)
+    local index=0
+    local len="${#arr[@]}"
+
+    for newcandidate in "${arr[@]}"; do
+        if [ "$DIRSONLY" -eq 0 -a -f "$newcandidate" ]; then
+            
+            if [[ "$MATCH_PATTERN" -eq 0 && ! "$newcandidate" =~ $PATTERN ]]; then continue; fi
+
+            if [[ "$MATCH_PATTERN" -eq 1 && "$newcandidate" =~ $PATTERN ]]; then continue; fi
+
+            print_tabs $depth $index $len
+            echo "$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate"
+        elif [ -h "$newcandidate" -a -d "$newcandidate" ]; then
+            print_tabs $depth $index $len
+            echo -e "\e[1m\e[36m$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate\e[0m -> $targ"
+            if [ "$FOLLOW_SYMLINKS" -eq 1 ]; then
+                ((depth+=1))
+                rec_traversal "$newcandidate"
+                ((depth-=1))
+            fi
+        elif [ -d "$newcandidate" ]; then
+            print_tabs $depth $index $len
+            echo -e "\e[34m$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate\e[0m"
+            ((depth+=1))
+            rec_traversal "$newcandidate"
+            ((depth-=1))
+        fi
+        ((index+=1))
+    done
+    cd ..
+}
+
+rec_traversal $1
