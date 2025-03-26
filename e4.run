@@ -2,12 +2,13 @@
 
 # OPTION -R unfinished!!! ask
 PATH=.
-MAXLEVEL=999
+MAXLEVEL=99
 DIRSONLY=0
 FOLLOW_SYMLINKS=0
 FULL_PATHS=0
 MATCH_PATTERN='-1' # -1 no pattern, 0 - list matching files, 1 - list don't matching files
 PATTERN=''
+RESTART_AFTER_N=0
 
 
 print_usage() {
@@ -21,7 +22,7 @@ print_usage() {
     echo -e "\t-f Print the full path prefix for each file\n"
     echo -e "\t-L \e[1mlevel\e[0m"
     echo -e "\t\t go no deeper than \e[1mlevel\e[0m directories\n"
-    echo -e "\t-R (check out \e[1m-L\e[0m option)\n" #  \e[1mlevel\e[0m
+    echo -e "\t-R Rerun the tree when \e[1mlevel\e[0m depth is reached (check out \e[1m-L\e[0m option)\n"
     echo -e "\t-P \e[1mpattern\e[0m"
     echo -e "\t\t List only files matching the \e[1mpattern\e[0m\n"
     echo -e "\t-I \e[1mpattern\e[0m"
@@ -40,9 +41,8 @@ while getopts "adlfL:RP:I:h" option; do
                 echo "Provide numeric option argument for -- L. Provided: $OPTARG".
                 exit 65
             fi
-            [ "$OPTARG" -lt "$MAXLEVEL" -a "$OPTARG" -gt 0 ] && MAXLEVEL="$OPTARG";
-            ;;
-        R ) echo "R is also provided!!!" ;;
+            [ "$OPTARG" -lt "$MAXLEVEL" -a "$OPTARG" -gt 0 ] && MAXLEVEL="$OPTARG" ;;
+        R ) [ "$MAXLEVEL" -gt 0 -a "$MAXLEVEL" -lt 99 ] && RESTART_AFTER_N=1 ;;
         P ) MATCH_PATTERN=0; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
         I ) MATCH_PATTERN=1; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
     esac
@@ -60,17 +60,16 @@ if ! [ -d "$1" ]; then
     exit 
 fi
 
+print_depth=1
 print_tabs()
 {
     buff=""
-    local v
-    ((v=$3-1))
     
     for ((i=0; i<$1; i++)); do
         buff+="    "
     done
 
-    if [ "$2" -eq "$v" ]; then
+    if [ "$2" -eq $(($3-1)) ]; then
         buff+="└── "
     else
         buff+="├── "
@@ -79,12 +78,20 @@ print_tabs()
     echo -en "$buff"
 }
 
-depth=1
+
 echo -e "\e[34m$1\e[0m"
-rec_traversal() {
-    if [ "$depth" -gt "$MAXLEVEL" ]; then
+
+# $1 => dir, $2 => depth, 3 => print_depth
+rec_traversal() { 
+    if [ "$2" -gt "$MAXLEVEL" ]; then
         return 0
     fi
+
+    if [ "$RESTART_AFTER_N" -eq 1 -a "$2" -eq "$MAXLEVEL" ]; then
+	    eval "rec_traversal $1 0 $(($3+1))"
+        return 0
+    fi
+   
 
     cd $1
     local arr=(*)
@@ -98,26 +105,22 @@ rec_traversal() {
 
             if [[ "$MATCH_PATTERN" -eq 1 && "$newcandidate" =~ $PATTERN ]]; then continue; fi
 
-            print_tabs $depth $index $len
+            print_tabs $3 $index $len
             echo "$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate"
-        elif [ -h "$newcandidate" -a -d "$newcandidate" ]; then
-            print_tabs $depth $index $len
-            echo -e "\e[1m\e[36m$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate\e[0m -> $targ"
+        elif [ -h "$newcandidate" -a -d "$newcandidate" -a -r "$newcandidate" ]; then
+            print_tabs $3 $index $len
+            echo -e "\e[1m\e[36m$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate\e[0m -> (symink)"
             if [ "$FOLLOW_SYMLINKS" -eq 1 ]; then
-                ((depth+=1))
-                rec_traversal "$newcandidate"
-                ((depth-=1))
+                rec_traversal "$newcandidate" $(($2+1)) $(($3+1))
             fi
-        elif [ -d "$newcandidate" ]; then
-            print_tabs $depth $index $len
+        elif [ -d "$newcandidate" -a -r "$newcandidate" ]; then
+            print_tabs $3 $index $len
             echo -e "\e[34m$([ "$FULL_PATHS" -eq 1 ] && echo $(pwd)/)$newcandidate\e[0m"
-            ((depth+=1))
-            rec_traversal "$newcandidate"
-            ((depth-=1))
+            rec_traversal "$newcandidate" $(($2+1)) $(($3+1))
         fi
         ((index+=1))
     done
     cd ..
 }
 
-rec_traversal $1
+rec_traversal $1 1 1
