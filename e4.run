@@ -43,8 +43,8 @@ while getopts "adlfL:RP:I:h" option; do
             fi
             [ "$OPTARG" -lt "$MAXLEVEL" -a "$OPTARG" -gt 0 ] && MAXLEVEL="$OPTARG" ;;
         R ) [ "$MAXLEVEL" -gt 0 -a "$MAXLEVEL" -lt 99 ] && RESTART_AFTER_N=1 ;;
-        P ) MATCH_PATTERN=0; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
-        I ) MATCH_PATTERN=1; PATTERN="$OPTARG"; echo "match: $MATCH_PATTERN, pattern: $PATTERN";;
+        P ) MATCH_PATTERN=0; PATTERN="$OPTARG" ;;
+        I ) MATCH_PATTERN=1; PATTERN="$OPTARG" ;;
     esac
 done
 
@@ -60,7 +60,6 @@ if ! [ -d "$1" ]; then
     exit 
 fi
 
-print_depth=1
 print_tabs()
 {
     buff=""
@@ -81,7 +80,7 @@ print_tabs()
 
 echo -e "\e[34m$1\e[0m"
 
-# $1 => dir, $2 => depth, 3 => print_depth
+# $1 => dir, $2 => structure_depth, 3 => print_depth
 rec_traversal() { 
     if [ "$2" -gt "$MAXLEVEL" ]; then
         return 0
