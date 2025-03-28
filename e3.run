@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 PATH=.
+DICT=dict
+ARRAY=array
+
 mode=""
 search_val=""
 file_path=""
+
 
 while getopts "k:v:" opt; do
     if [[ "$opt" == "k" ]]; then
@@ -54,9 +58,14 @@ key_buffer=""
 value_buffer=""
 nex_val_matched=0
 
-
 struct_state_push () {
-    struct_stack+=( "$inside_struct" )
+    struct_stack+=("$inside_struct")
+    if [ -n "$key_buffer" ]; then
+        current_path+=("$key_buffer")
+        key_buffer=""
+    fi
+
+    inside_struct=$1
 }
 
 struct_state_pop() {
@@ -64,24 +73,28 @@ struct_state_pop() {
     if [ "${#struct_stack[@]}" -gt 0 ]; then
         inside_struct="${struct_stack[-1]}"
     fi
+
+    if [ "${#current_path[@]}" -gt 0 ]; then
+        unset 'current_path[-1]'
+    fi
 }
  
 while IFS='' read -r -n 1 char; do
     if [[ "$read_what" == "key" ]]; then # keys
         if [[ "$char" == '"' && "$double_q_open" -eq 1 ]]; then
             double_q_open=0
-            current_path+=("$keybuffer")
-            echo "${current_path[@]}"
-            keybuffer=""
-            concat_path=$(IFS='.' && echo "${current_path[*]}")
-            if [[ "$mode" == "key" && "$search_val" == "$concat_path" ]]; then
+
+            concat_path=("${current_path[@]}" "$key_buffer")
+            # echo "Curr path: ${current_path[@]}, curr+keybuff=${concat_path[*]}"
+            if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
                 nex_val_matched=1
-                echo "key match"
             fi
+            
         elif [[ "$char" == '"' ]]; then
+            key_buffer=""
             double_q_open=1
         elif [[ "$double_q_open" -eq 1 ]]; then
-            keybuffer+="$char"
+            key_buffer+="$char"
         elif [[ "$char" == ":" ]]; then
             read_what=data
         fi
@@ -90,37 +103,41 @@ while IFS='' read -r -n 1 char; do
             double_q_open=0
             if [[ "$mode" == "value" && "$search_val" == "$value_buffer" ]]; then
                 echo "path $(IFS='.' && echo "${current_path[*]}") matched with val $value_buffer"
+            elif [[ "$mode" == "key" && "$nex_val_matched" -eq 1 ]]; then
+                echo "$(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
+                nex_val_matched=0
             fi
             value_buffer=""
         elif [[ "$char" == '"' ]]; then
             double_q_open=1
         elif [[ "$double_q_open" -eq 1 || "$char" =~ [-0-9] ]]; then
             value_buffer+="$char"
-            echo "$value_buffer"
         elif [[ "$char" == "[" ]]; then
             ((square_br_open++))
-            struct_state_push
-            inside_struct=array
+            struct_state_push "$ARRAY"
         elif [[ "$char" == "]" ]]; then
             ((square_br_open--))
             struct_state_pop
         elif [[ "$char" == "{" ]]; then
             ((curly_br_open++))
-            struct_state_push
+            struct_state_push "$DICT"
             read_what=key
-            inside_struct=dict
         elif [[ "$char" == "}" ]]; then
             ((curly_br_open--))
             struct_state_pop
         elif [[ "$char" == ',' ]]; then
-            [[ "$inside_struct" == "dict" ]] && read_what=key
+            [[ "$inside_struct" == "$DICT" ]] && read_what=key
             if [[ "$mode" == "value" && "$search_val" == "$value_buffer" ]]; then
-                echo "path $(IFS='.' && echo "${current_path[*]}") matched with val $value_buffer"
+                echo "path $(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
+            elif [[ "$mode" == "key" && "$nex_val_matched" -eq 1 ]]; then
+                echo "$(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
+                nex_val_matched=0
             fi
+
             value_buffer=""
         fi
     fi
-    # echo -e "Ch: $char | read_what: $read_what| \": $double_q_open, stack: ${struct_stack[@]}"
+    # echo -e "Ch: $char | kb: $key_buffer | vb: $value_buffer | \": $double_q_open, stack: ${struct_stack[@]}"
 done < "$file_path";
 
 if ! [ "$square_br_open" -eq 0 -a "$curly_br_open" -eq 0 -a "$double_q_open" -eq 0 ]; then
