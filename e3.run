@@ -1,2 +1,114 @@
 #!/usr/bin/env bash
 PATH=.
+mode=""
+search_val=""
+file_path=""
+
+while getopts "k:v:" opt; do
+    if [[ "$opt" == "k" ]]; then
+        if [[ "$mode" == "value" ]]; then
+            echo "-k and -v are mutually exclusive!"
+            exit 1 
+        fi
+        mode="key"
+        search_val="$OPTARG"
+    elif [[ "$opt" == 'v' ]]; then
+        if [[ "$mode" == "key" ]]; then
+            echo  echo "-k and -v are mutually exclusive!"
+            exit 1
+        fi
+        mode="value"
+        search_val="$OPTARG"
+    else echo "Usage: $0 ([-k key_path] | [-v value]) json_file"; exit 1;
+    fi
+done
+
+shift $((OPTIND-1))
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 ([-k key_path] | [-v value]) json_file"
+    exit 65
+fi
+
+if [ -z "$mode" ]; then
+    mode="key"
+    search_val="$1"
+    file_path="$2"
+fi
+
+if [ ! -e "$file_path" ]; then 
+    echo "File $file_path doesn't exist" 
+    exit 66
+fi
+
+echo "Mode: $mode, key: $search_val, filepath: $file_path"
+
+
+
+declare -a current_path
+struct_stack=()
+current_path_last_ind=0
+square_br_open=0
+curly_br_open=0
+double_q_open=0
+read_what="trash" # trash, key, data
+inside_struct=""
+buffer=""
+
+struct_state_push () {
+    struct_stack+=( "$inside_struct" )
+}
+
+struct_state_pop() {
+    unset 'struct_stack[-1]'
+    inside_struct="${struct_stack[-1]}"
+}
+ 
+while IFS='' read -n 1 char; do
+    if [[ "$read_what" == "key" ]]; then
+        if [[ "$char" == '"' ]]; then
+            if [ "$double_q_open" -eq 1 ]; then
+                double_q_open=0
+                if [[ "$mode" == "key" ]]; then
+                    current_path+=("$buffer")
+                    buffer=""
+                    echo ${current_path[@]}
+                else
+                    :
+                fi
+            else
+                double_q_open=1
+            fi
+        elif [ "$double_q_open" -eq 1 ]; then
+            buffer+="$char"
+        fi
+    elif [[ "$read_what"  == "data" ]]; then  
+        :
+    else # not reading anything yet
+        if [[ "$char" == "[" ]]; then
+            ((square_br_open++))
+            struct_state_push
+            read_what=data
+            inside_struct=array
+        elif [[ "$char" == "]" ]]; then
+            ((square_br_open--))
+            :
+        elif [[ "$char" == "{" ]]; then
+            ((curly_br_open++))
+            struct_state_push
+            read_what=key
+            inside_struct=dict
+        elif [[ "$char" == "}" ]]; then
+            ((curly_br_open--))
+            :
+        # elif [[ "$char" == '"' ]]; then
+            
+        fi
+    fi
+done < "$file_path";
+
+echo "$square_br_open $curly_br_open"
+if ! [ "$square_br_open" -eq 0 -a "$curly_br_open" -eq 0 ]; then
+    echo "Invalid JSON!"
+    exit 1
+fi

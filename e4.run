@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-
-# OPTION -R unfinished!!! ask
 PATH=.
 MAXLEVEL=99
 DIRSONLY=0
