@@ -14,6 +14,7 @@ PATH=.
 # text=$(<$1)
 # echo "$text"
 
-a=01
-((a+=1))
-echo $a
+arr=("apple" "banana" "")
+arr+=("cherry")
+
+IFS='.' && echo "${arr[*]}"
