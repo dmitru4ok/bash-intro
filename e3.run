@@ -19,7 +19,7 @@ while getopts "k:v:d" opt; do
         search_val="$OPTARG"
     elif [[ "$opt" == 'v' ]]; then
         if [[ "$mode" == "key" ]]; then
-            echo  echo "-k and -v are mutually exclusive!"
+            echo "-k and -v are mutually exclusive!"
             exit 1
         fi
         mode="value"
@@ -38,7 +38,6 @@ fi
 
 if [ -z "$mode" ]; then
     mode="key"
-    echo "$1 $2"
     search_val="$1"
     file_path="$2"
 fi
@@ -50,6 +49,7 @@ fi
 
 declare -a current_path
 declare -a struct_stack
+declare -a array_indices_stack
 
 square_br_open=0
 curly_br_open=0
@@ -58,20 +58,34 @@ read_what=data # key, data
 inside_struct="n"
 key_buffer=""
 value_buffer=""
-nex_val_matched=0
+does_key_match=0
+
+
+check_key_match() {
+    concat_path=("${current_path[@]}" "$key_buffer")
+    if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
+        does_key_match=1
+        echo "key $(IFS='.' && echo "${concat_path[*]}") matches!"
+    fi
+}
 
 struct_state_push () {
     struct_stack+=("$inside_struct")
-    if [ -n "$key_buffer" ]; then
+    if [ "$curly_br_open" -gt 0 -o "$square_br_open" -gt 0 ]; then
         current_path+=("$key_buffer")
-        key_buffer=""
+    fi
+
+    if [[ "$inside_struct" == "$ARRAY" ]]; then
+        array_indices_stack+=("$key_buffer")
     fi
 
     inside_struct=$1
     if [[ "$inside_struct" == "$DICT" ]]; then
         ((curly_br_open++))
+        read_what=key
     else
         ((square_br_open++))
+        read_what=data
     fi
 }
 
@@ -92,71 +106,72 @@ struct_state_pop() {
         unset 'current_path[-1]'
     fi
 }
-
-flush_buffers() {
-    : 
-}
  
 while IFS='' read -r -n 1 char; do
     if [[ "$read_what" == "key" ]]; then # read keys
         if [[ "$char" == '"' && "$double_q_open" -eq 1 ]]; then
             double_q_open=0
         elif [[ "$char" == '"' ]]; then
-            key_buffer=""
             double_q_open=1
         elif [[ "$double_q_open" -eq 1 ]]; then
             key_buffer+="$char"
         elif [[ "$char" == ":" ]]; then
-            concat_path=("${current_path[@]}" "$key_buffer")
-            if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
-                nex_val_matched=1
-            fi
+            check_key_match
             read_what=data
         fi
     else # read data
         if [[ "$char" == '"' && "$double_q_open" -eq 1 ]]; then
             double_q_open=0
-            # if [[ "$mode" == "value" && "$search_val" == "$value_buffer" ]]; then
-            #     echo "$(IFS='.' && echo "${current_path[*]}".$value_buffer)"
-            # elif [[ "$mode" == "key" && "$nex_val_matched" -eq 1 ]]; then
-            #     echo "$(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
-            #     nex_val_matched=0
-            # fi
-            value_buffer=""
         elif [[ "$char" == '"' ]]; then
             double_q_open=1
         elif [[ "$double_q_open" -eq 1 || "$char" =~ [-0-9] ]]; then
             value_buffer+="$char"
         elif [[ "$char" == "[" ]]; then
             struct_state_push "$ARRAY"
+            key_buffer=0
         elif [[ "$char" == "]" ]]; then
+            check_key_match
             struct_state_pop
+            if [[ "$inside_struct" == "$DICT" ]]; then
+                key_buffer=""
+            else
+                [ "${#array_indices_stack[@]}" -gt 0 ] && key_buffer="${array_indices_stack[-1]}" || key_buffer=""
+                ((key_buffer++))
+            fi
+            value_buffer=""
+            
         elif [[ "$char" == "{" ]]; then
             struct_state_push "$DICT"
-            read_what=key
+            key_buffer=""
         elif [[ "$char" == "}" ]]; then
             struct_state_pop
-        elif [[ "$char" == "," ]]; then
-            # if [[ "$mode" == "value" && "$search_val" == "$value_buffer" ]]; then
-            #     echo "$(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
-            # elif [[ "$mode" == "key" && "$nex_val_matched" -eq 1 ]]; then
-            #     echo "$(IFS='.' && echo "${current_path[*]}".$key_buffer) = $value_buffer"
-            #     nex_val_matched=0
-            # fi
-            if [[ "$inside_struct" == "$ARRAY" ]]; then
-                read_what=value
+            if [[ "$inside_struct" == "$DICT" ]]; then
+                key_buffer=""
+                value_buffer=""
             else
+                [ "${#array_indices_stack[@]}" -gt 0 ] && key_buffer="${array_indices_stack[-1]}" || key_buffer=""
+                ((key_buffer++))
+            fi
+            value_buffer=""
+            
+        elif [[ "$char" == "," ]]; then
+            check_key_match
+            if [[ "$inside_struct" == "$DICT" ]]; then
+                key_buffer=""
+                value_buffer=""
                 read_what=key
+            else
+                ((key_buffer++))
+                read_what=data
             fi
             value_buffer=""
         fi
     fi
-    [ "$VERBOSE" -eq 1 ] && printf "Char: %-1s | %-5s | kb: %-10s | vb: %-12s | stack: %-12s | inside_structure: %-5s | sq_br: %-1s | c_br: %-1s\n" \
-    "$char" "$read_what" "$key_buffer" "$value_buffer" "${struct_stack[*]}" "$inside_struct" "$square_br_open" "$curly_br_open"
-
+    [ "$VERBOSE" -eq 1 ] && printf "Char: %-1s | %-5s | kb: %-10s | vb: %-12s | inside_structure: %-5s | %-s \n" \
+    "$char" "$read_what" "$key_buffer" "$value_buffer" "$inside_struct" "${current_path[*]}"
 done < "$file_path";
 
 if ! [ "$square_br_open" -eq 0 -a "$curly_br_open" -eq 0 -a "$double_q_open" -eq 0 ]; then
-    echo "Invalid JSON!"
+    echo "Invalid JSON! $square_br_open $curly_br_open $double_q_open"
     exit 1
 fi
