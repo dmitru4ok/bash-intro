@@ -65,7 +65,7 @@ check_key_match() {
     concat_path=("${current_path[@]}" "$key_buffer")
     if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
         does_key_match=1
-        echo "key $(IFS='.' && echo "${concat_path[*]}") matches!"
+        echo -n "$(IFS='.' && echo "${concat_path[*]}") = "
     fi
 }
 
@@ -127,10 +127,17 @@ while IFS='' read -r -n 1 char; do
         elif [[ "$double_q_open" -eq 1 || "$char" =~ [-0-9.] ]]; then
             value_buffer+="$char"
         elif [[ "$char" == "[" ]]; then
+            if [ "$does_key_match" -eq 1 ]; then
+                echo "[...]"
+                does_key_match=0
+            fi
             struct_state_push "$ARRAY"
             key_buffer=0
         elif [[ "$char" == "]" ]]; then
-            check_key_match
+            concat_path=("${current_path[@]}" "$key_buffer")
+            if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
+                IFS='.' &&  echo "${concat_path[*]} = $value_buffer ]"
+            fi
             struct_state_pop
             if [[ "$inside_struct" == "$DICT" ]]; then
                 key_buffer=""
@@ -145,10 +152,18 @@ while IFS='' read -r -n 1 char; do
             value_buffer=""
             
         elif [[ "$char" == "{" ]]; then
+            if [ "$does_key_match" -eq 1 ]; then
+                echo "{...}"
+                does_key_match=0
+            fi
             struct_state_push "$DICT"
             key_buffer=""
         elif [[ "$char" == "}" ]]; then
             struct_state_pop
+             if [ "$does_key_match" -eq 1 ]; then
+                echo "$value_buffer"
+                does_key_match=0
+            fi
             if [[ "$inside_struct" == "$DICT" ]]; then
                 key_buffer=""
                 value_buffer=""
@@ -163,12 +178,20 @@ while IFS='' read -r -n 1 char; do
             value_buffer=""
             
         elif [[ "$char" == "," ]]; then
-            check_key_match
+           
             if [[ "$inside_struct" == "$DICT" ]]; then
+                if [ "$does_key_match" -eq 1 ]; then
+                    echo "$value_buffer"
+                    does_key_match=0
+                fi
                 key_buffer=""
                 value_buffer=""
                 read_what=key
             else
+                concat_path=("${current_path[@]}" "$key_buffer")
+                if [[ "$mode" == "key" && "$search_val" == $(IFS='.' && echo "${concat_path[*]}") ]]; then
+                    IFS='.' && echo "${concat_path[*]} =  ,"
+                fi
                 ((key_buffer++))
                 read_what=data
             fi
