@@ -124,7 +124,7 @@ while IFS='' read -r -n 1 char; do
             double_q_open=0
         elif [[ "$char" == '"' ]]; then
             double_q_open=1
-        elif [[ "$double_q_open" -eq 1 || "$char" =~ [-0-9] ]]; then
+        elif [[ "$double_q_open" -eq 1 || "$char" =~ [-0-9.] ]]; then
             value_buffer+="$char"
         elif [[ "$char" == "[" ]]; then
             struct_state_push "$ARRAY"
@@ -135,8 +135,12 @@ while IFS='' read -r -n 1 char; do
             if [[ "$inside_struct" == "$DICT" ]]; then
                 key_buffer=""
             else
-                [ "${#array_indices_stack[@]}" -gt 0 ] && key_buffer="${array_indices_stack[-1]}" || key_buffer=""
-                ((key_buffer++))
+                if [ "${#array_indices_stack[@]}" -gt 0 ]; then 
+                    key_buffer="${array_indices_stack[-1]}"
+                    unset 'array_indices_stack[-1]'
+                else
+                    key_buffer=""
+                fi
             fi
             value_buffer=""
             
@@ -149,8 +153,12 @@ while IFS='' read -r -n 1 char; do
                 key_buffer=""
                 value_buffer=""
             else
-                [ "${#array_indices_stack[@]}" -gt 0 ] && key_buffer="${array_indices_stack[-1]}" || key_buffer=""
-                ((key_buffer++))
+                if [ "${#array_indices_stack[@]}" -gt 0 ]; then 
+                    key_buffer="${array_indices_stack[-1]}"
+                    unset 'array_indices_stack[-1]'
+                else
+                    key_buffer=""
+                fi
             fi
             value_buffer=""
             
