@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
 PATH=.
+
+arr=("apple" "banana" "cherry")
+echo ${arr[@]}, ${#arr[@]}
+unset 'arr[1]'
+echo ${arr[@]}, ${#arr[@]}, "${arr[2]}"

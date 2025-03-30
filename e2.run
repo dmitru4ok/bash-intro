@@ -1,20 +1,53 @@
 #!/usr/bin/env bash
 PATH=.
 
-# if [ -z $1 ]; then
-#     echo "Please provide text file as the argument"
-#     exit 65 
-# fi
+if [ -z $1 ]; then
+    echo "Usage: $0 text_file"
+    exit 65
+fi
 
-# if [ ! -e $1 ]; then
-#     echo "File $1 doesn't exist..."
-#     exit 66
-# fi
+if [ ! -e $1 ]; then
+    echo "File $1 doesn't exist..."
+    exit 66
+fi
+pattern="[\",\';:()]"
+declare -a TOKENIZED
+index=0
+previous_preprocessed=""
+LEN_TRESHOLD=3
 
-# text=$(<$1)
-# echo "$text"
+while IFS='?! ' read -a sentences; do
+    
+    for current in "${sentences[@]}"; do
+        current_preprocessed="${current//[,\";:()`]}"
+        current_preprocessed="${current_preprocessed#\'}"
+        current_preprocessed="${current_preprocessed%\'}"
+       
+        # echo "$current_preprocessed"
+        if [ -z "$previous_preprocessed" ]; then
+            TOKENIZED["$index"]+="$current_preprocessed "
+        elif [[ "$current_preprocessed" =~ ^[A-Z].*\.$ ]]; then # is capital and dotted
+            dotless="${current_preprocessed//.}"
+           
+            # echo "$current_preprocessed ||||| $dotless"
+            if [ "${#dotless}" -gt "$LEN_TRESHOLD" ]; then
+                ((index++))
+            fi
+            TOKENIZED["$index"]+="$current_preprocessed "
+        elif [[ "$current_preprocessed" =~ [\.]$ ]]; then
+            TOKENIZED["$index"]+="$current_preprocessed"
+            ((index++))
+            # echo "$current_preprocessed ends wit a dot"
+        else
+            TOKENIZED["$index"]+="$current_preprocessed "
+        fi
+        previous_preprocessed="$current_preprocessed"
+    done
+    sentences=()
+done < "$1"
+ # current_preprocessed="${current_preprocessed,,}" # ADD LOWERCASE ON TOKENIZATION STEP
 
-arr=("apple" "banana" "")
-arr+=("cherry")
 
-IFS='.' && echo "${arr[*]}"
+for sen in "${TOKENIZED[@]}"; do
+    echo "$sen"
+done
