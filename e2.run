@@ -10,44 +10,81 @@ if [ ! -e $1 ]; then
     echo "File $1 doesn't exist..."
     exit 66
 fi
-pattern="[\",\';:()]"
+
+qmem_index=0
+declare -a PREPROCESSED
+while IFS= read -r -n 1 char; do
+    if [[ "$char" == "!" || "$char" == "?" ]]; then
+        ((qmem_index++))
+    elif [ -z "$char" ]; then 
+        PREPROCESSED["$qmem_index"]+=' '
+    else
+        PREPROCESSED["$qmem_index"]+="${char//[,\’\‘\";–:()\`\_\—\@\#\$\%\^\&\*\+\=\{\}\[\]]/\ }"
+    fi
+done < "$1"
+
+
 declare -a TOKENIZED
+declare -A DISPLAYED_MAP
 index=0
 previous_preprocessed=""
-LEN_TRESHOLD=3
+LEN_TRESHOLD=1
+declare -A USUAL_DOTTED=( [p.m.]=1 [a.m.]=1 [etc.]=1 [e.g.]=1 [al.]=1 [fac.]=1 [i.e.]=1 [p.a.]=1 
+    [t.t.]=1 [t.p.]=1 [t.y.]=1 [pvz.]=1 [kt.]=1 [pan.]=1 [žr.]=1 [prof.]=1 [dr.]=1 [akad.]=1 [doc.]=1 [phd.]=1 [adj.]=1 [plg.]=1 
+    [lit.]=1 [inž.]=1 [mln.]=1 [mlrd.]=1 [met.]=1 [d.]=1 [val.]=1 [min.]=1 [sek.]=1 [a.]=1 [pav.]=1
+)
 
-while IFS='?! ' read -a sentences; do
-    
-    for current in "${sentences[@]}"; do
-        current_preprocessed="${current//[,\";:()`]}"
-        current_preprocessed="${current_preprocessed#\'}"
+display_sentence_stats() {
+    [ "${#TOKENIZED[@]}" -eq 0 ] && return 1
+
+    echo -e "${TOKENIZED[@]}\n------------- ${#TOKENIZED[@]}\n"
+    TOKENIZED=()
+}
+
+pp_index=0
+while [ "$pp_index" -le "$qmem_index" ]; do 
+    IFS=' ' read -a words <<< "${PREPROCESSED["$pp_index"]}"
+    # echo "${words[@]}"
+    for current in "${words[@]}"; do
+        current_preprocessed="${current#\'}"
         current_preprocessed="${current_preprocessed%\'}"
-       
-        # echo "$current_preprocessed"
-        if [ -z "$previous_preprocessed" ]; then
-            TOKENIZED["$index"]+="$current_preprocessed "
-        elif [[ "$current_preprocessed" =~ ^[A-Z].*\.$ ]]; then # is capital and dotted
-            dotless="${current_preprocessed//.}"
-           
-            # echo "$current_preprocessed ||||| $dotless"
-            if [ "${#dotless}" -gt "$LEN_TRESHOLD" ]; then
-                ((index++))
+        # echo "$current"
+        if [ -n "$previous_preprocessed" ]; then
+            if [[ "${current_preprocessed}" =~ ^[A-Z] && "${#current_preprocessed}" -gt "$LEN_TRESHOLD" ]]; then
+                TOKENIZED+=("${previous_preprocessed,,}")
+                display_sentence_stats
+                TOKENIZED+=("${current_preprocessed,,}")
+            else
+                TOKENIZED+=("${previous_preprocessed,,}")
+                TOKENIZED+=("${current_preprocessed,,}")
             fi
-            TOKENIZED["$index"]+="$current_preprocessed "
+            previous_preprocessed=""
+        elif [[ "$current_preprocessed" =~ ^[0-9]*\.$ ]]; then
+            dotless="${current_preprocessed//.}"
+            TOKENIZED+=("${dotless,,}")
+            display_sentence_stats
+        elif [[ "$current_preprocessed" =~ ^[A-Z].*\.$ ]]; then
+            TOKENIZED+=("${current_preprocessed,,}")
         elif [[ "$current_preprocessed" =~ [\.]$ ]]; then
-            TOKENIZED["$index"]+="$current_preprocessed"
-            ((index++))
-            # echo "$current_preprocessed ends wit a dot"
+            lower="${current_preprocessed,,}"
+            if [ -n "${USUAL_DOTTED[$lower]}" ]; then
+                TOKENIZED+=("${lower//.}")
+                continue
+            fi
+            previous_preprocessed="${current_preprocessed//.}"
         else
-            TOKENIZED["$index"]+="$current_preprocessed "
+            TOKENIZED+=("${current_preprocessed,,}")
         fi
-        previous_preprocessed="$current_preprocessed"
     done
-    sentences=()
-done < "$1"
- # current_preprocessed="${current_preprocessed,,}" # ADD LOWERCASE ON TOKENIZATION STEP
-
-
-for sen in "${TOKENIZED[@]}"; do
-    echo "$sen"
+    if [ -n "$previous_preprocessed" ]; then
+        TOKENIZED+="$previous_preprocessed" 
+        previous_preprocessed=""
+    fi
+    display_sentence_stats
+    ((pp_index++))
 done
+
+
+# for sen in "${TOKENIZED[@]}"; do
+#     echo "$sen ${#sen}"
+# done
