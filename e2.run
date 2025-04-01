@@ -2,14 +2,40 @@
 PATH=.
 
 if [ -z $1 ]; then
-    echo "Usage: $0 text_file"
+    echo "Usage: $0 text_file [db_noun_file]" >&2
     exit 65
 fi
 
-if [ ! -e $1 ]; then
-    echo "File $1 doesn't exist..."
+if [ ! -f $1 ]; then
+    echo "File $1 doesn't exist..." >&2
     exit 66
 fi
+
+if [ ! -r "$1" ]; then
+    echo "Permission error: $1." >&2
+    exit 66
+fi
+
+
+if [ -z "$2" ]; then
+    NOUN_DB_PATH=/opt/task1/resources/noundb.txt
+    echo -e "\e[0;33mNo db_noun_file is provided. Using $NOUN_DB_PATH as a default\e[0m" >&2
+else
+    NOUN_DB_PATH="$2"
+fi
+
+
+if [ ! -f "$NOUN_DB_PATH" ]; then
+    echo "File $NOUN_DB_PATH doen't exist" >&2
+    exit 66
+fi
+
+if [ ! -r "$NOUN_DB_PATH" ]; then
+    echo "Permission error: $NOUN_DB_PATH" >&2
+    exit 66
+fi
+
+
 
 qmem_index=0
 declare -a PREPROCESSED
@@ -36,15 +62,19 @@ declare -A USUAL_DOTTED=( [p.m.]=1 [a.m.]=1 [etc.]=1 [e.g.]=1 [al.]=1 [fac.]=1 [
 
 display_sentence_stats() {
     [ "${#TOKENIZED[@]}" -eq 0 ] && return 1
-    echo "---------------------------------------------------"
-    echo "|${TOKENIZED[@]}|"
+
     declare -A positions
-    max_width=0
+    local max_width=0
+    local noun_counter=0
     for word_ind in "${!TOKENIZED[@]}"; do
         word="${TOKENIZED["$word_ind"]}"
         positions["$word"]+="$word_ind "
         [ "${#word}" -gt "$max_width" ] && max_width="${#word}"
+        [ -n "${noun_map["$word"]}" ] && ((++noun_counter))
     done
+    echo "---------------------------------------------------"
+    echo "|${TOKENIZED[@]}|"
+    echo "NOUNS: $noun_counter"
 
     words_unique=("${!positions[@]}")
     for ((ind1=0; ind1<${#words_unique[@]}; ++ind1)); do
@@ -76,17 +106,23 @@ display_sentence_stats() {
     TOKENIZED=()
 }
 
+declare -A noun_map
+while read -r line; do
+    noun_map["$line"]=1
+done < "$NOUN_DB_PATH"
+
+declare -l lower
 pp_index=0
 while [ "$pp_index" -le "$qmem_index" ]; do 
     IFS=' ' read -a words <<< "${PREPROCESSED["$pp_index"]}"
     for current in "${words[@]}"; do
         current_preprocessed="${current#\'}"
         current_preprocessed="${current_preprocessed%\'}"
-        # echo "$current"
+        echo "$current"
         if [ -n "$previous_preprocessed" ]; then
             if [[ "${current_preprocessed}" =~ ^[A-Z] && "${#current_preprocessed}" -gt "$LEN_TRESHOLD" ]]; then
                 TOKENIZED+=("${previous_preprocessed,,}")
-                display_sentence_stats
+                # display_sentence_stats
                 TOKENIZED+=("${current_preprocessed,,}")
             else
                 TOKENIZED+=("${previous_preprocessed,,}")
@@ -96,11 +132,11 @@ while [ "$pp_index" -le "$qmem_index" ]; do
         elif [[ "$current_preprocessed" =~ ^[0-9]*\.$ ]]; then
             dotless="${current_preprocessed//.}"
             TOKENIZED+=("${dotless,,}")
-            display_sentence_stats
+            # display_sentence_stats
         elif [[ "$current_preprocessed" =~ ^[A-Z].*\.$ ]]; then
             TOKENIZED+=("${current_preprocessed,,}")
         elif [[ "$current_preprocessed" =~ [\.]$ ]]; then
-            lower="${current_preprocessed,,}"
+            lower="${current_preprocessed}"
             if [ -n "${USUAL_DOTTED[$lower]}" ]; then
                 TOKENIZED+=("${lower//.}")
                 continue
@@ -114,6 +150,6 @@ while [ "$pp_index" -le "$qmem_index" ]; do
         TOKENIZED+="$previous_preprocessed" 
         previous_preprocessed=""
     fi
-    display_sentence_stats
+    # display_sentence_stats
     ((pp_index++))
 done

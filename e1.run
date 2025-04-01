@@ -12,14 +12,15 @@ RANGE_LIMITER=50
 LOGICAL="logical"
 NUMBER="number"
 STRING="string"
+NOUN_DB_PATH=""
 
 if [ -z $1 ]; then
-    echo "Please provide CSV_SPACE_SEP_FILE as first argument"
+    echo "Please provide CSV_SPACE_SEP_FILE as first argument" >&2
     exit 65
 fi
 
 if [ ! -e $1 ]; then
-    echo "File $1 doesn't exist..."
+    echo "File $1 doesn't exist..." >&2
     exit 66
 fi
 
@@ -94,7 +95,7 @@ read -a cols <<< "${COLUMNS[0]}"
 no_of_columns=${#cols[@]}
 
 if [ "$no_of_columns" -ge "$RANGE_LIMITER" ]; then
-    echo "Up to $RANGE_LIMITER columns are supported!"
+    echo "Up to $RANGE_LIMITER columns are supported!" >&2
     exit 65
 fi
 
