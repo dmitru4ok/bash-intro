@@ -51,7 +51,7 @@ done < "$1"
 
 
 declare -a TOKENIZED
-declare -A DISPLAYED_MAP
+declare -A DISPLAYED_MAP UNIQUE_SENTENCES
 index=0
 previous_preprocessed=""
 LEN_TRESHOLD=1
@@ -62,6 +62,9 @@ declare -A USUAL_DOTTED=( [p.m.]=1 [a.m.]=1 [etc.]=1 [e.g.]=1 [al.]=1 [fac.]=1 [
 
 display_sentence_stats() {
     [ "${#TOKENIZED[@]}" -eq 0 ] && return 1
+    local sentence_concat="$TOKENIZED[*]"
+    [ -n "${UNIQUE_SENTENCES["$sentence_concat"]}" ] && return 1
+    UNIQUE_SENTENCES["$sentence_concat"]=1
 
     declare -A positions
     local max_width=0
@@ -103,6 +106,7 @@ display_sentence_stats() {
         done
     done
     echo "---------------------------------------------------"
+
     TOKENIZED=()
 }
 
@@ -118,7 +122,6 @@ while [ "$pp_index" -le "$qmem_index" ]; do
     for current in "${words[@]}"; do
         current_preprocessed="${current#\'}"
         current_preprocessed="${current_preprocessed%\'}"
-        echo "$current"
         if [ -n "$previous_preprocessed" ]; then
             if [[ "${current_preprocessed}" =~ ^[A-Z] && "${#current_preprocessed}" -gt "$LEN_TRESHOLD" ]]; then
                 TOKENIZED+=("${previous_preprocessed,,}")
