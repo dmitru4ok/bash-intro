@@ -36,15 +36,49 @@ declare -A USUAL_DOTTED=( [p.m.]=1 [a.m.]=1 [etc.]=1 [e.g.]=1 [al.]=1 [fac.]=1 [
 
 display_sentence_stats() {
     [ "${#TOKENIZED[@]}" -eq 0 ] && return 1
+    echo "---------------------------------------------------"
+    echo "|${TOKENIZED[@]}|"
+    declare -A positions
+    max_width=0
+    for word_ind in "${!TOKENIZED[@]}"; do
+        word="${TOKENIZED["$word_ind"]}"
+        positions["$word"]+="$word_ind "
+        [ "${#word}" -gt "$max_width" ] && max_width="${#word}"
+    done
 
-    echo -e "${TOKENIZED[@]}\n------------- ${#TOKENIZED[@]}\n"
+    words_unique=("${!positions[@]}")
+    for ((ind1=0; ind1<${#words_unique[@]}; ++ind1)); do
+        for ((ind2=ind1+1; ind2<${#words_unique[@]}; ++ind2)); do
+            
+            w1="${words_unique[$ind1]}"
+            w2="${words_unique[$ind2]}"
+            
+            IFS=' ' read -a p1 <<< "${positions["$w1"]}"
+            IFS=' ' read -a p2 <<< "${positions["$w2"]}"
+            sum=0
+            counter=0
+            for pos1 in "${p1[@]}"; do
+                for pos2 in "${p2[@]}"; do
+                    exp=$(( $pos1 - $pos2 > 0 ? $pos1 - $pos2 : $pos2 - $pos1 ))
+                    if [ "$exp" -ne 0 ]; then
+                        ((++counter))
+                        ((sum+=$exp))
+                    fi
+                done
+            done
+            if [ "$counter" -ne 0 ]; then
+                result=$(($sum * 100 / $counter))
+                printf "|%-*s| <-> |%-*s|: AVG dist = %d.%02d\n" "$max_width" "$w1" "$max_width" "$w2" "$(($result / 100))" "$(($result % 100))"
+            fi
+        done
+    done
+    echo "---------------------------------------------------"
     TOKENIZED=()
 }
 
 pp_index=0
 while [ "$pp_index" -le "$qmem_index" ]; do 
     IFS=' ' read -a words <<< "${PREPROCESSED["$pp_index"]}"
-    # echo "${words[@]}"
     for current in "${words[@]}"; do
         current_preprocessed="${current#\'}"
         current_preprocessed="${current_preprocessed%\'}"
@@ -83,8 +117,3 @@ while [ "$pp_index" -le "$qmem_index" ]; do
     display_sentence_stats
     ((pp_index++))
 done
-
-
-# for sen in "${TOKENIZED[@]}"; do
-#     echo "$sen ${#sen}"
-# done
