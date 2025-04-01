@@ -1,7 +1,27 @@
 #!/usr/bin/env bash
 PATH=.
 
-arr=("apple" "banana" "cherry")
-echo ${arr[@]}, ${#arr[@]}
-unset 'arr[1]'
-echo ${arr[@]}, ${#arr[@]}, "${arr[2]}"
+if [ -z "$1" ]; then
+    echo "Usage: $0 log_file"
+    exit 65
+fi
+
+if [ ! -f "$1" ]; then
+    echo -e "\e[0;31mFile $1 doesn't exist.\e[0m"
+    exit 66
+fi
+
+if [ ! -r "$1" ]; then
+    echo -e "\e[0;31mPermission error when reading $1.\e[0m"
+    exit 66
+fi
+
+exec 3< "$1"
+trap " exec 3<&-; exit" SIGINT # is rlly required?
+
+while : ; do
+    while read -u 3 line; do
+        IFS=" " read -r -a arr <<< "$line"
+        echo ${#arr[@]}
+    done
+done
