@@ -122,7 +122,7 @@ while [ "$pp_index" -le "$qmem_index" ]; do
         if [ -n "$previous_preprocessed" ]; then
             if [[ "${current_preprocessed}" =~ ^[A-Z] && "${#current_preprocessed}" -gt "$LEN_TRESHOLD" ]]; then
                 TOKENIZED+=("${previous_preprocessed,,}")
-                # display_sentence_stats
+                display_sentence_stats
                 TOKENIZED+=("${current_preprocessed,,}")
             else
                 TOKENIZED+=("${previous_preprocessed,,}")
@@ -132,7 +132,7 @@ while [ "$pp_index" -le "$qmem_index" ]; do
         elif [[ "$current_preprocessed" =~ ^[0-9]*\.$ ]]; then
             dotless="${current_preprocessed//.}"
             TOKENIZED+=("${dotless,,}")
-            # display_sentence_stats
+            display_sentence_stats
         elif [[ "$current_preprocessed" =~ ^[A-Z].*\.$ ]]; then
             TOKENIZED+=("${current_preprocessed,,}")
         elif [[ "$current_preprocessed" =~ [\.]$ ]]; then
@@ -147,9 +147,9 @@ while [ "$pp_index" -le "$qmem_index" ]; do
         fi
     done
     if [ -n "$previous_preprocessed" ]; then
-        TOKENIZED+="$previous_preprocessed" 
+        TOKENIZED+=("${previous_preprocessed,,}")
         previous_preprocessed=""
     fi
-    # display_sentence_stats
+    display_sentence_stats
     ((pp_index++))
 done
