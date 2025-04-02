@@ -13,15 +13,55 @@ fi
 
 if [ ! -r "$1" ]; then
     echo -e "\e[0;31mPermission error when reading $1.\e[0m"
-    exit 66
+    exit 1
 fi
 
+
+declare -a parsed_res
+parse_logfile_string() {
+    local string="$1"
+    local inside_quotes=0
+    local parsed_ind=0
+    local iter_ind=0
+    local col=""
+    IFS=" " read -a temp <<< "$string"
+    local temp_len="${#temp[@]}"
+
+    while [ "$iter_ind" -lt "$temp_len" ]; do
+        col="${temp["$iter_ind"]}"
+        
+
+        if [[ "$col" =~ \"$ && "$col" =~ ^\" ]] || [[ "$col" =~ ^\[ && "$col" =~ \]$ ]]; then
+            col="${col#\"\[}"
+            parsed_res["$parsed_ind"]="${col%\"\]}"
+            ((++parsed_ind))
+        elif [[ "$col" =~ ^\" || "$col" =~ ^\[ ]]; then
+            parsed_res["$parsed_ind"]="${col#\"} "
+            inside_quotes=1
+        elif [[ "$col" =~ \"$ || "$col" =~ \]$ ]]; then
+            parsed_res["$parsed_ind"]+="${col%\"\[}"
+            inside_quotes=0
+            ((++parsed_ind))
+       
+        elif [ "$inside_quotes" -eq 1 ]; then
+            parsed_res["$parsed_ind"]+="$col "
+        else
+            parsed_res["$parsed_ind"]="$col"
+            ((++parsed_ind))
+        fi
+        ((iter_ind++))
+    done
+
+    echo "${parsed_res[@]}"
+}
+
+declare -a sliding_window
 exec 3< "$1"
-trap " exec 3<&-; exit" SIGINT # is rlly required?
+trap "exec 3<&-; exit" SIGINT
 
 while : ; do
     while read -u 3 line; do
-        IFS=" " read -r -a arr <<< "$line"
-        echo ${#arr[@]}
+        parse_logfile_string "$line"
+        parsed_res=()
     done
 done
