@@ -94,14 +94,14 @@ while : ; do
             done
         else
             for key in "${!result_arr[@]}"; do
+                if [[ "${key#,*}" =~ ^0, ]] || [[ "${key#,*}" =~ ^$(($N-1)), ]]; then
+                        unset result_arr["$key"]
+                fi
+
                 for ((line_ind=1; line_ind<${N}; line_ind++)); do
                     if [[ "${key#,*}" =~ ^${line_ind}, ]]; then
                         post_key="${key#*,}"
                         result_arr["$(($line_ind - 1)),$post_key"]="${result_arr["$key"]}"
-                        unset result_arr["$key"]
-                    fi
-
-                    if [[ "${key#,*}" =~ ^0, ]] || [[ "${key#,*}" =~ ^$(($N-1)), ]]; then
                         unset result_arr["$key"]
                     fi
                 done
