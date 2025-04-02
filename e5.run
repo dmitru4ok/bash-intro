@@ -24,6 +24,7 @@ if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 
+
 declare -a parsed_res
 declare -A result_arr
 parse_logfile_string() {
@@ -74,6 +75,20 @@ parse_logfile_string() {
     done
 }
 
+display_stats() {
+    for ((i=0; i <${1}; ++i)); do
+    echo "LINE: $i"
+    echo "----------------------------------"
+        for key in "${!result_arr[@]}"; do
+            if [[ "${key#,*}" =~ ^${i}, ]]; then
+                echo "$key => ${result_arr[$key]} occurencies"
+            fi
+        done
+        echo
+    done
+    
+}
+
 exec 3< "$1"
 trap "echo; exec 3<&-; exit" SIGINT
 lines_read=0;
@@ -81,21 +96,15 @@ lines_read=0;
 while : ; do
     while read -u 3 line; do
         echo -e "\033c"
-        echo "Current buffer:"
         if [ "$lines_read" -lt "$N" ]; then
             parse_logfile_string "$line" "$lines_read"
             ((++lines_read))
-            for ((i=0; i <${lines_read}; ++i)); do
-                for key in "${!result_arr[@]}"; do
-                    if [[ "${key#,*}" =~ ^[$i,] ]]; then
-                        echo "keymatch: $key $i ${result_arr[$key]}"
-                    fi
-                done
-            done
+            echo "Log file len is less than $N. Stats for $lines_read lines: "
+            display_stats "$lines_read"
         else
             for key in "${!result_arr[@]}"; do
-                if [[ "${key#,*}" =~ ^0, ]] || [[ "${key#,*}" =~ ^$(($N-1)), ]]; then
-                        unset result_arr["$key"]
+                if [[ "${key#,*}" =~ ^0, ]]; then
+                    unset result_arr["$key"]
                 fi
 
                 for ((line_ind=1; line_ind<${N}; line_ind++)); do
@@ -107,18 +116,8 @@ while : ; do
                 done
             done
             parse_logfile_string "$line" "$(($N-1))"
-            for ((i=0; i <${N}; ++i)); do
-                for key in "${!result_arr[@]}"; do
-                    if [[ "${key#,*}" =~ ^${i}, ]]; then
-                        echo "keymatch: $key ${result_arr[$key]}"
-                    fi
-                done
-            done
-            for smth in "${!result_arr[@]}"; do
-                echo "$smth"
-            done
+            display_stats "$N"
         fi
-       
         parsed_res=()
     done
 done
