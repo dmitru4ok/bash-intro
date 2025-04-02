@@ -93,18 +93,23 @@ while : ; do
                 done
             done
         else
-            for ((line_ind=1; line_ind<${N}; line_ind++)); do
-                for key in "${!result_arr[@]}"; do
-                    if [[ "${key#,*}" =~ ^[$i,] ]]; then
+            for key in "${!result_arr[@]}"; do
+                for ((line_ind=1; line_ind<${N}; line_ind++)); do
+                    if [[ "${key#,*}" =~ ^${line_ind}, ]]; then
                         post_key="${key#*,}"
                         result_arr["$(($line_ind - 1)),$post_key"]="${result_arr["$key"]}"
+                        unset result_arr["$key"]
+                    fi
+
+                    if [[ "${key#,*}" =~ ^0, ]] || [[ "${key#,*}" =~ ^$(($N-1)), ]]; then
+                        unset result_arr["$key"]
                     fi
                 done
             done
             parse_logfile_string "$line" "$(($N-1))"
             for ((i=0; i <${N}; ++i)); do
                 for key in "${!result_arr[@]}"; do
-                    if [[ "${key#,*}" =~ ^[$i,] ]]; then
+                    if [[ "${key#,*}" =~ ^${i}, ]]; then
                         echo "keymatch: $key ${result_arr[$key]}"
                     fi
                 done
