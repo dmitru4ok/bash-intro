@@ -37,18 +37,28 @@ parse_logfile_string() {
     while [ "$iter_ind" -lt "$temp_len" ]; do
         col="${temp["$iter_ind"]}"
         
-        if [[ "$col" =~ \"$ && "$col" =~ ^\" ]] || [[ "$col" =~ ^\[ && "$col" =~ \]$ ]]; then
-            col="${col#\"\[}"
-            parsed_res["$parsed_ind"]="${col%\"\]}"
+        if [[ "$col" =~ \"$ && "$col" =~ ^\" ]]; then
+            col="${col#\"}"
+            parsed_res["$parsed_ind"]="${col%\"}"
             ((++parsed_ind))
-        elif [[ "$col" =~ ^\" || "$col" =~ ^\[ ]]; then
+        elif [[ "$col" =~ ^\[ && "$col" =~ \]$ ]]; then
+            col="${col#\[}"
+            parsed_res["$parsed_ind"]="${col%\]}"
+            ((++parsed_ind))
+        elif [[ "$col" =~ ^\" ]]; then
             parsed_res["$parsed_ind"]="${col#\"} "
             inside_quotes=1
-        elif [[ "$col" =~ \"$ || "$col" =~ \]$ ]]; then
-            parsed_res["$parsed_ind"]+="${col%\"\[}"
+        elif [[ "$col" =~ ^\[ ]]; then 
+            parsed_res["$parsed_ind"]="${col#\[} "
+            inside_quotes=1
+        elif [[ "$col" =~ \"$ ]]; then
+            parsed_res["$parsed_ind"]+="${col%\"}"
             inside_quotes=0
             ((++parsed_ind))
-       
+        elif [[ "$col" =~ \]$ ]]; then
+            parsed_res["$parsed_ind"]+="${col%\]}"
+            inside_quotes=0
+            ((++parsed_ind))
         elif [ "$inside_quotes" -eq 1 ]; then
             parsed_res["$parsed_ind"]+="$col "
         else
@@ -58,41 +68,38 @@ parse_logfile_string() {
         ((iter_ind++))
     done
 
-    echo "${parsed_res[@]}"
+    for elem in "${parsed_res[@]}"; do
+        eval "line_${2}_parsed+=(\"\$elem\")"
+    done
 }
 
-buffer=()
+# buffer=()
 exec 3< "$1"
-trap "exec 3<&-; exit" SIGINT
+trap "echo; exec 3<&-; exit" SIGINT
 lines_read=0;
 while : ; do
     while read -u 3 line; do
-        if [ "$lines_read" -lt "$N" ]; then
-            declare -a "line_${lines_read}_parsed"
-            buffer+=("${line}")
-            # echo "--------------------------"
-            # echo "Preliminary parsing:"
-           
-            # echo "${buffer[@]}"
-            # echo "--------------------------"
-            ((++lines_read))
-        else
-            for ((line_ind=1; line_ind<${N}; line_ind++)); do
-                buffer["$(($line_ind - 1))"]="${buffer["$line_ind"]}"
-            done
-            buffer["$(($N - 1))"]="$line"
-            # echo "--------------------------"
-            # echo "Post update: "
-            # echo "${buffer[@]}"
-            # echo "--------------------------"
-        fi
         echo -e "\033c"
         echo "Current buffer:"
-        for buff_part in "${buffer[@]}"; do
-            parse_logfile_string "$buff_part"
-        done
-       
-
+        if [ "$lines_read" -lt "$N" ]; then
+            declare -a "line_${lines_read}_parsed"
+            parse_logfile_string "$line" "$lines_read"
+            # buffer+=("${line}")
+            ((++lines_read))
+            for ((i=0; i <${lines_read}; ++i)); do
+                eval "value=\"\${line_${i}_parsed[@]}\""
+                echo $value
+            done
+        else
+            for ((line_ind=1; line_ind<${N}; line_ind++)); do
+                eval "line_$(($line_ind - 1))_parsed=(\"\${line_${line_ind}_parsed[@]}\")"
+                # buffer["$(($line_ind - 1))"]="${buffer["$line_ind"]}"
+            done
+            parse_logfile_string "$line" "$lines_read"
+            for ((i=0; i <${N}; ++i)); do
+                eval "echo \"\${line_${i}_parsed[@]}\""
+            done
+        fi
        
         parsed_res=()
     done

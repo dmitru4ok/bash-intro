@@ -101,7 +101,7 @@ fi
 
 datatypes=()
 for (( ind = 0; ind < $no_of_columns; ind++ )); do
-    declare -A "col_${ind}_stat"
+    declare -a "col_${ind}_stat"
     datatypes["$ind"]="$LOGICAL"
 done
 
