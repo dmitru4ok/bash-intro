@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+PATH=.
+
+string="Test_stTRing str"
+read -a arr << str 
+"$string"
+str
+
+echo "${arr[@],,,}"

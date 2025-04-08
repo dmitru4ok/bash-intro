@@ -69,55 +69,61 @@ parse_logfile_string() {
         fi
         ((iter_ind++))
     done
-
+    echo "${parsed_res[@]}"
+    local col=0
     for string in "${parsed_res[@]}"; do
-        ((result_arr["$2,$string"]++))
+        ((result_arr["$col,$string"]++))
+        ((col++))
     done
+    parsed_res=()
 }
 
 display_stats() {
-    for ((i=0; i <${1}; ++i)); do
-    echo "LINE: $i"
+    max_key=0
+    for key in "${!result_arr[@]}"; do
+        parsed_k="${key%%,*}"
+        max_key=$(($parsed_k > $max_key ? $parsed_k : $max_key ))
+    done
+
+    for ((i=0; i<${max_key}; ++i)); do
+    echo "Column number: $i"
     echo "----------------------------------"
         for key in "${!result_arr[@]}"; do
             if [[ "${key#,*}" =~ ^${i}, ]]; then
-                echo "$key => ${result_arr[$key]} occurencies"
+                echo "${key#*,} => ${result_arr[$key]} occurencies"
             fi
         done
         echo
-    done
-    
+    done 
 }
 
 exec 3< "$1"
 trap "echo; exec 3<&-; exit" SIGINT
 lines_read=0;
+declare -a window
 
 while : ; do
     while read -u 3 line; do
+        unset result_arr
+        declare -A result_arr
         echo -e "\033c"
         if [ "$lines_read" -lt "$N" ]; then
-            parse_logfile_string "$line" "$lines_read"
             ((++lines_read))
             echo "Log file len is less than $N. Stats for $lines_read lines: "
+            window+=("${line}")
+            for ((windowind=0; windowind<${lines_read}; ++windowind)); do
+                parse_logfile_string "${window["$windowind"]}" "$windowind" 
+            done
             display_stats "$lines_read"
         else
-            for key in "${!result_arr[@]}"; do
-                if [[ "${key#,*}" =~ ^0, ]]; then
-                    unset result_arr["$key"]
-                fi
-
-                for ((line_ind=1; line_ind<${N}; line_ind++)); do
-                    if [[ "${key#,*}" =~ ^${line_ind}, ]]; then
-                        post_key="${key#*,}"
-                        result_arr["$(($line_ind - 1)),$post_key"]="${result_arr["$key"]}"
-                        unset result_arr["$key"]
-                    fi
-                done
+            for ((i=1; i<${N}; ++i)); do
+                window["$(($i - 1))"]="${window["$i"]}"
             done
-            parse_logfile_string "$line" "$(($N-1))"
+            window["$(($N - 1))"]="${line}"
+            for ((windowind=0; windowind<${N}; ++windowind)); do
+                parse_logfile_string "${window["$windowind"]}" "$windowind" 
+            done
             display_stats "$N"
         fi
-        parsed_res=()
     done
 done
